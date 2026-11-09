@@ -1,0 +1,5 @@
+# SQLite databases (source cache is ~1.2 GB; outputs are generated)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
