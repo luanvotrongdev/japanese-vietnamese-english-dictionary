@@ -5,3 +5,4 @@
 *.sqlite-shm
 zig-out/
 .zig-cache/
+/ja-vi-jmdict
