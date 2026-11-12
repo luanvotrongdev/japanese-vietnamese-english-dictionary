@@ -1,13 +1,19 @@
 //! Text cleanup for display, restoring what the old Bun exporter did to
-//! every string (entries.ts `cleanStrings`/`tidy`, dictfile.ts `cleanText`):
+//! every string (entries.ts `cleanStrings`/`tidy`, dictfile.ts `cleanText`),
+//! plus removing the HTML that Mazii text carries:
 //!
+//! - Strip HTML tags (`<br>`, `<span style=…>`, `<div>`, `<b>`) and decode
+//!   entities (`&agrave;`, double-escaped `&amp;amp;`, `&nbsp` without its
+//!   semicolon). Exporters escape text, so these would otherwise show as
+//!   literal markup. Mazii's subject labels (`<Y>`, `<TIN>`) are kept.
 //! - NFC: Mazii text partly uses decomposed accents (a letter followed by a
 //!   combining mark), which Kobo's fonts draw badly.
 //! - Remove invisible characters (zero-width space, BOM, soft hyphen) and
 //!   control characters. Kobo parses its shards as XML, where control
 //!   characters other than tab and line breaks are invalid.
-//! - Collapse line breaks and tabs, with the spaces around them, to one space.
-//! - Drop combining marks at the start, which have no letter to sit on.
+//! - Collapse whitespace runs, line breaks included, to one space.
+//! - Drop combining marks at the start, which have no letter to sit on, and
+//!   commas or semicolons left at either end.
 //!
 //! NFC here only touches combining marks U+0300–U+036F (Latin, Vietnamese,
 //! Greek and Cyrillic accents), so Japanese text is never changed. The data
@@ -17,34 +23,243 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const table = @import("nfc_table.zig");
 
-/// NFC, invisible and control characters removed, line breaks collapsed,
-/// trimmed. Returns `s` itself when nothing changes.
+/// Markup removed, NFC, invisible and control characters removed,
+/// whitespace collapsed, trimmed. Returns a slice of `s` when nothing changes.
 pub fn clean(a: Allocator, s: []const u8) ![]const u8 {
-    const composed = try nfc(a, s);
-    if (!needsScrub(composed)) return dropLeadingMarks(std.mem.trim(u8, composed, " "));
+    const composed = try nfc(a, try stripMarkup(a, s));
+    if (!needsScrub(composed)) return trimEdges(composed);
 
     var out: std.ArrayList(u8) = try .initCapacity(a, composed.len);
-    var line_break = false;
+    var space = false;
     var i: usize = 0;
     while (i < composed.len) {
         const n = std.unicode.utf8ByteSequenceLength(composed[i]) catch 1;
         const ch = composed[i..@min(i + n, composed.len)];
         i += ch.len;
         if (isInvisible(ch)) continue;
-        if (ch.len == 1 and (ch[0] == '\r' or ch[0] == '\n' or ch[0] == '\t')) {
-            line_break = true;
+        if (ch.len == 1 and (ch[0] == ' ' or ch[0] == '\r' or ch[0] == '\n' or ch[0] == '\t')) {
+            space = true;
             continue;
         }
         if (ch.len == 1 and (ch[0] < 0x20 or ch[0] == 0x7f)) continue;
-        if (line_break) {
-            if (ch[0] == ' ') continue; // spaces after the break
-            while (out.items.len > 0 and out.items[out.items.len - 1] == ' ') out.items.len -= 1;
-            if (out.items.len > 0) out.appendAssumeCapacity(' ');
-            line_break = false;
-        }
+        if (space and out.items.len > 0) out.appendAssumeCapacity(' ');
+        space = false;
         out.appendSliceAssumeCapacity(ch);
     }
-    return dropLeadingMarks(std.mem.trim(u8, out.items, " "));
+    return trimEdges(out.items);
+}
+
+fn trimEdges(s: []const u8) []const u8 {
+    return std.mem.trim(u8, dropLeadingMarks(std.mem.trim(u8, s, " ")), " ,;");
+}
+
+/// HTML tags Mazii text contains. Only lowercase names count, so subject
+/// labels such as `<B>` or `<Y>` are not mistaken for tags.
+const html_tags = std.StaticStringMap(void).initComptime(.{
+    .{"a"},   .{"b"},   .{"br"}, .{"div"}, .{"em"}, .{"font"},  .{"i"},
+    .{"img"}, .{"li"},  .{"ol"}, .{"p"},   .{"s"},  .{"span"},  .{"strong"},
+    .{"sub"}, .{"sup"}, .{"u"},  .{"ul"},  .{"hr"}, .{"table"}, .{"td"},
+    .{"tr"},
+});
+
+const entities = std.StaticStringMap([]const u8).initComptime(.{
+    .{ "amp", "&" },  .{ "lt", "<" },   .{ "gt", ">" }, .{ "quot", "\"" },
+    .{ "apos", "'" }, .{ "nbsp", " " },
+    .{ "times", "×" },
+    .{ "divide", "÷" },
+    .{ "hellip", "…" },
+    .{ "ndash", "–" },
+    .{ "mdash", "—" },
+    .{ "lsquo", "‘" },
+    .{ "rsquo", "’" },
+    .{ "ldquo", "“" },
+    .{ "rdquo", "”" },
+    .{ "deg", "°" },
+    .{ "middot", "·" },
+    .{ "copy", "©" },
+    .{ "reg", "®" },
+    .{ "agrave", "à" },
+    .{ "aacute", "á" },
+    .{ "acirc", "â" },
+    .{ "atilde", "ã" },
+    .{ "egrave", "è" },
+    .{ "eacute", "é" },
+    .{ "ecirc", "ê" },
+    .{ "igrave", "ì" },
+    .{ "iacute", "í" },
+    .{ "ograve", "ò" },
+    .{ "oacute", "ó" },
+    .{ "ocirc", "ô" },
+    .{ "otilde", "õ" },
+    .{ "ugrave", "ù" },
+    .{ "uacute", "ú" },
+    .{ "yacute", "ý" },
+    .{ "Agrave", "À" },
+    .{ "Aacute", "Á" },
+    .{ "Acirc", "Â" },
+    .{ "Atilde", "Ã" },
+    .{ "Egrave", "È" },
+    .{ "Eacute", "É" },
+    .{ "Ecirc", "Ê" },
+    .{ "Igrave", "Ì" },
+    .{ "Iacute", "Í" },
+    .{ "Ograve", "Ò" },
+    .{ "Oacute", "Ó" },
+    .{ "Ocirc", "Ô" },
+    .{ "Otilde", "Õ" },
+    .{ "Ugrave", "Ù" },
+    .{ "Uacute", "Ú" },
+    .{ "Yacute", "Ý" },
+});
+
+/// Removes HTML tags and decodes entities (twice, for double-escaped text),
+/// then drops "nbsp" fragments and stray "&" left by Mazii's broken escaping
+/// ("lẩu,&amp", "&amp;amp; nbsp"). Returns `s` itself when it has neither.
+pub fn stripMarkup(a: Allocator, s: []const u8) ![]const u8 {
+    if (std.mem.indexOfAny(u8, s, "<&") == null and std.mem.indexOf(u8, s, "nbsp") == null) return s;
+    var t = try removeTags(a, s);
+    t = try decodeEntities(a, t);
+    t = try decodeEntities(a, t);
+    return removeLeftovers(a, t);
+}
+
+fn removeTags(a: Allocator, s: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = try .initCapacity(a, s.len);
+    var i: usize = 0;
+    while (i < s.len) {
+        if (s[i] == '<') {
+            if (tagEnd(s, i)) |end| {
+                // A line break separates text; other tags just disappear.
+                const name = tagName(s, i);
+                if (std.mem.eql(u8, name, "br") or std.mem.eql(u8, name, "div") or std.mem.eql(u8, name, "p") or std.mem.eql(u8, name, "li")) {
+                    out.appendAssumeCapacity(' ');
+                }
+                i = end;
+                continue;
+            }
+        }
+        out.appendAssumeCapacity(s[i]);
+        i += 1;
+    }
+    return out.items;
+}
+
+fn tagName(s: []const u8, start: usize) []const u8 {
+    var i = start + 1;
+    if (i < s.len and s[i] == '/') i += 1;
+    while (i < s.len and s[i] == ' ') i += 1;
+    const name_start = i;
+    while (i < s.len and std.ascii.isLower(s[i])) i += 1;
+    return s[name_start..i];
+}
+
+/// End (one past '>') of an HTML tag starting at `start`, or null when the
+/// '<' does not start one of `html_tags`.
+fn tagEnd(s: []const u8, start: usize) ?usize {
+    const name = tagName(s, start);
+    if (!html_tags.has(name)) return null;
+    const after = @intFromPtr(name.ptr) - @intFromPtr(s.ptr) + name.len;
+    if (after >= s.len or (s[after] != '>' and s[after] != ' ' and s[after] != '/')) return null;
+    const close = std.mem.indexOfScalarPos(u8, s, after, '>') orelse return null;
+    return close + 1;
+}
+
+fn decodeEntities(a: Allocator, s: []const u8) ![]const u8 {
+    if (std.mem.indexOfScalar(u8, s, '&') == null) return s;
+    var out: std.ArrayList(u8) = try .initCapacity(a, s.len + 8);
+    var i: usize = 0;
+    while (i < s.len) {
+        if (s[i] == '&') {
+            if (decodeEntity(s[i..])) |e| {
+                switch (e.value) {
+                    .text => |text| try out.appendSlice(a, text),
+                    .codepoint => |c| {
+                        var buf: [4]u8 = undefined;
+                        const n = std.unicode.utf8Encode(c, &buf) catch 0;
+                        try out.appendSlice(a, buf[0..n]);
+                    },
+                }
+                i += e.len;
+                continue;
+            }
+        }
+        try out.append(a, s[i]);
+        i += 1;
+    }
+    return out.items;
+}
+
+const Decoded = struct {
+    value: union(enum) { text: []const u8, codepoint: u21 },
+    /// Bytes the entity takes in the input.
+    len: usize,
+};
+
+fn decodeEntity(s: []const u8) ?Decoded {
+    var i: usize = 1;
+    if (i < s.len and s[i] == '#') {
+        i += 1;
+        const hex = i < s.len and (s[i] == 'x' or s[i] == 'X');
+        if (hex) i += 1;
+        const digits_start = i;
+        while (i < s.len and std.ascii.isHex(s[i])) i += 1;
+        if (i == digits_start or i >= s.len or s[i] != ';') return null;
+        const c = std.fmt.parseInt(u21, s[digits_start..i], if (hex) 16 else 10) catch return null;
+        if (!std.unicode.utf8ValidCodepoint(c)) return null;
+        return .{ .value = .{ .codepoint = c }, .len = i + 1 };
+    }
+    while (i < s.len and std.ascii.isAlphanumeric(s[i])) i += 1;
+    const name = s[1..i];
+    const text = entities.get(name) orelse return null;
+    if (i < s.len and s[i] == ';') return .{ .value = .{ .text = text }, .len = i + 1 };
+    // Mazii often drops the semicolon after these two, and the transform
+    // splits glosses on ';', cutting it off at the end ("v&agrave").
+    if (i == s.len or std.mem.eql(u8, name, "amp") or std.mem.eql(u8, name, "nbsp")) {
+        return .{ .value = .{ .text = text }, .len = i };
+    }
+    return null;
+}
+
+fn isWordByte(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c >= 0x80;
+}
+
+/// A real "&" sits between two word characters (R&D) or two spaces (A & B).
+fn keepAmpersand(s: []const u8, i: usize) bool {
+    if (i == 0 or i + 1 >= s.len) return false;
+    const before = s[i - 1];
+    const after = s[i + 1];
+    return (isWordByte(before) and isWordByte(after)) or (before == ' ' and after == ' ');
+}
+
+/// Drops the word "nbsp" and stray "&" left by broken escaping.
+fn removeLeftovers(a: Allocator, s: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = try .initCapacity(a, s.len);
+    var i: usize = 0;
+    while (i < s.len) {
+        if (std.mem.startsWith(u8, s[i..], "nbsp") and (i == 0 or !isWordByte(s[i - 1])) and
+            (i + 4 == s.len or !isWordByte(s[i + 4])))
+        {
+            i += 4;
+            continue;
+        }
+        if (s[i] == '&' and !keepAmpersand(s, i)) {
+            i += 1;
+            continue;
+        }
+        out.appendAssumeCapacity(s[i]);
+        i += 1;
+    }
+    // Commas and semicolons that now sit next to each other or before a space.
+    var j: usize = 0;
+    var k: usize = 0;
+    const b = out.items;
+    while (j < b.len) : (j += 1) {
+        if ((b[j] == ',' or b[j] == ';') and k > 0 and (b[k - 1] == ',' or b[k - 1] == ';')) continue;
+        b[k] = b[j];
+        k += 1;
+    }
+    return b[0..k];
 }
 
 /// Mazii sometimes splits a gloss right after a letter, leaving its accent
@@ -95,6 +310,7 @@ fn isInvisible(ch: []const u8) bool {
 
 fn needsScrub(s: []const u8) bool {
     for (s) |c| if (c < 0x20 or c == 0x7f) return true;
+    if (std.mem.indexOf(u8, s, "  ") != null) return true;
     return std.mem.indexOf(u8, s, "\u{200b}") != null or
         std.mem.indexOf(u8, s, "\u{feff}") != null or
         std.mem.indexOf(u8, s, "\u{ad}") != null;
@@ -243,6 +459,35 @@ test "clean removes invisible characters and line breaks" {
     try t.expectEqualStrings("ab", try clean(a, "a\x08b\x10"));
     try t.expectEqualStrings("bánh", try clean(a, "ba\u{301}nh"));
     try t.expectEqualStrings("lưu", try clean(a, "\u{323}lưu"));
+    try t.expectEqualStrings("chụp tia X", try clean(a, "chụp  tia X"));
+}
+
+test "clean removes Mazii markup" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const t = std.testing;
+    try t.expectEqualStrings("Gãy, rỉ nước qua khe nứt", try clean(a, "Gãy, rỉ nước qua khe nứt<br><br>"));
+    try t.expectEqualStrings("Đồng hồ đo điện trở Ohm", try clean(a, "<span style=\"color: rgb(0, 0, 245); \">Đồng hồ đo điện trở Ohm</span>"));
+    try t.expectEqualStrings("thặng dư nhà sản xuất", try clean(a, "<b>thặng dư nhà sản xuất</ b><br>"));
+    try t.expectEqualStrings("割引だね。", try clean(a, "<div>割引だね。<br></div>"));
+    try t.expectEqualStrings("Sự vận động và thay đổi", try clean(a, "Sự vận động v&agrave; thay đổi"));
+    try t.expectEqualStrings("ủng hộ thiếu úy", try clean(a, "ủng hộ thiếu úy&amp;amp; nbsp"));
+    try t.expectEqualStrings("lẩu", try clean(a, "lẩu,&amp"));
+    try t.expectEqualStrings("Sự vận động và", try clean(a, "Sự vận động v&agrave"));
+    try t.expectEqualStrings("x&agravex", try clean(a, "x&agravex")); // not an entity name
+    try t.expectEqualStrings("thanh toán minh bạch", try clean(a, "nbsp,&amp,thanh toán minh bạch"));
+    try t.expectEqualStrings("rằng điểm số thấp.", try clean(a, "rằng&amp;nbsp; điểm số thấp."));
+    try t.expectEqualStrings("CIF&I", try clean(a, "CIF&amp;I"));
+    try t.expectEqualStrings("R&D", try clean(a, "R&D"));
+    try t.expectEqualStrings("rock & roll", try clean(a, "rock &amp; roll"));
+    try t.expectEqualStrings("a < b", try clean(a, "a &lt; b"));
+    try t.expectEqualStrings("Đ", try clean(a, "&#272;"));
+    // Subject labels from Mazii's source dictionary stay.
+    try t.expectEqualStrings("<Y> dịch, thể dịch", try clean(a, "<Y>  dịch, thể dịch"));
+    try t.expectEqualStrings("<PHẫU> âm hộ", try clean(a, "<PHẫU> âm hộ"));
+    try t.expect(!hasText(try clean(a, "nbsp")));
+    try t.expect(!hasText(try clean(a, "&amp")));
     try t.expectEqualStrings("Mèo con.", try tidy(a, "Mèo con ."));
     try t.expect(hasText("ăn"));
     try t.expect(hasText("食"));

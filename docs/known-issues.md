@@ -128,7 +128,7 @@ Some Mazii text uses decomposed accents (base letter + combining mark), so it wo
 
 ## Effect on the Kobo and Yomitan exports
 
-Like the old Bun exporter, `kobo` and `yomitan` clean text at export time (`src/text.zig`): NFC, invisible and control characters, line breaks, a space before punctuation, placeholder values and repeated glosses. So #6 and #7 and the gloss part of #9 don't show in the dictionaries, but they are still in `javi.sqlite` until the transform does the same cleanup. The other problems above do show up in both dictionaries. Both exports have kanji cards from the kanji step (5,857 of 5,994 kanji; the rest have no Hán Việt reading and no meaning). Name senses (#1) show their name type as a note, for example "(Place)", instead of as a part of speech.
+Like the old Bun exporter, `kobo` and `yomitan` clean text at export time (`src/text.zig`): HTML tags and entities (subject labels like `<Y>` are kept as text), NFC, invisible and control characters, whitespace runs, a space before punctuation, placeholder values and repeated glosses. So #5–#8 and the gloss part of #9 don't show in the dictionaries, and #4's junk glosses are dropped, though a gloss split at an entity's `;` still shows as two glosses, but they are still in `javi.sqlite` until the transform does the same cleanup. The other problems above do show up in both dictionaries. Both exports have kanji cards from the kanji step (5,857 of 5,994 kanji; the rest have no Hán Việt reading and no meaning). Name senses (#1) show their name type as a note, for example "(Place)", instead of as a part of speech.
 
 ## Not fixable from this data
 
