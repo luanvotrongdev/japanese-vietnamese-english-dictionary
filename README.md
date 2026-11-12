@@ -30,12 +30,12 @@ You can look a word up by any of its kanji spellings, its hiragana reading or it
 
 ## The data is not included
 
-This repository contains no dictionary data. The Vietnamese and English meanings come from Mazii and Jisho, and their content belongs to them, so it can't be redistributed. You build your own copy with the steps below.
+This repository contains no dictionary data. The Vietnamese and English meanings come from Mazii and Jisho, and their content belongs to them, so it can't be redistributed. You build your own copy with the steps below: import JMdict, crawl Mazii and Jisho, build the database, export.
 
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) **0.16.0** exactly (the standard library changes between releases)
-- `jmdict-cache.sqlite`: the crawl cache, holding JMdict headwords and readings plus the raw Mazii/Jisho responses. Put it in the repository root. The `crawl` command below fills in anything missing, but the database itself (its `entry`, `k_ele` and `r_ele` tables) is created by the original crawler project, [ja-vi-jmdict](https://github.com/luanvotrongdev/ja-vi-jmdict).
+- An internet connection for the first steps: downloading JMdict and crawling Mazii and Jisho
 - For Kobo: firmware **4.24.15672 or newer**, which supports custom dictionaries without patches
 
 ## Usage
@@ -48,7 +48,17 @@ zig build -Doptimize=ReleaseFast
 
 The program is `zig-out/bin/javi-transform` (`javi-transform.exe` on Windows).
 
-### 2. (Optional) Crawl missing entries
+### 2. Import JMdict
+
+```bash
+zig-out/bin/javi-transform jmdict jmdict-cache.sqlite
+```
+
+This downloads JMdict (`JMdict_e_examp.gz`, about 13 MB, from the EDRDG server) and stores every entry's headwords and readings in `jmdict-cache.sqlite`, the cache the next steps use. If the file doesn't exist yet, it is created.
+
+Run it again any time to pick up a newer JMdict. Existing entries keep their crawled data, and only new or changed words need crawling. Words that JMdict has removed are reported; add `--prune` to delete them along with their crawled data. To use a JMdict file you already have, pass `--file JMdict_e_examp.gz` (a `.gz` or `.xml` file).
+
+### 3. Crawl Mazii and Jisho
 
 ```bash
 zig-out/bin/javi-transform crawl jmdict-cache.sqlite --dry-run
@@ -58,9 +68,9 @@ zig-out/bin/javi-transform crawl jmdict-cache.sqlite --dry-run
 zig-out/bin/javi-transform crawl jmdict-cache.sqlite
 ```
 
-`--dry-run` only counts the entries and kanji that have no Mazii/Jisho data yet. Without it, the program fetches them and saves each one to the cache as it goes. Stop it any time with Ctrl+C; rerunning continues where it left off. It waits 0.5–1.5 seconds between requests. Please don't make it faster: be gentle with Mazii and Jisho. A full crawl takes many hours. Options: `--limit N`, `--min-sleep MS`, `--max-sleep MS`.
+This fetches the Vietnamese and English meanings for every word and kanji. `--dry-run` only counts the entries and kanji that have no Mazii/Jisho data yet. Without it, the program fetches them and saves each one to the cache as it goes. Stop it any time with Ctrl+C; rerunning continues where it left off. It waits 0.5–1.5 seconds between requests. Please don't make it faster: be gentle with Mazii and Jisho. A full crawl takes many hours. Options: `--limit N`, `--min-sleep MS`, `--max-sleep MS`.
 
-### 3. Build the dictionary database
+### 4. Build the dictionary database
 
 ```bash
 zig-out/bin/javi-transform build jmdict-cache.sqlite javi.sqlite
@@ -68,7 +78,7 @@ zig-out/bin/javi-transform build jmdict-cache.sqlite javi.sqlite
 
 This turns the raw crawl data into a clean database, `javi.sqlite` (about a minute). Both exports read from it.
 
-### 4a. Export the Kobo dictionary
+### 5a. Export the Kobo dictionary
 
 ```bash
 zig-out/bin/javi-transform kobo javi.sqlite dicthtml-ja.zip
@@ -83,7 +93,7 @@ To install it:
 
 **If Vietnamese letters are missing** (for example "CHIẾN" shows as "CHIN"), your Kobo is drawing the dictionary in its built-in Georgia font, which lacks letters like ư ơ ạ ế ự. The entries ask for a font that has them (Kobo Nickel), but some Kobos ignore that. Install the Vietnamese font fix from **[lelinhtinh/kobo-tieng-viet](https://github.com/lelinhtinh/kobo-tieng-viet)**. It replaces Kobo's Georgia and Avenir Next with Vietnamese-capable versions, which fixes the dictionary and Vietnamese text everywhere else on the device. In short: download `KoboRoot.tgz` from the project's latest release, copy it into `KOBOeReader/.kobo/`, and eject; the Kobo installs it and restarts. Follow that project's README for the current steps. It changes system files, and a firmware update can undo it.
 
-### 4b. Export the Yomitan dictionary
+### 5b. Export the Yomitan dictionary
 
 ```bash
 zig-out/bin/javi-transform yomitan javi.sqlite lulujv.zip
@@ -104,6 +114,7 @@ Each part of an entry has a `data-sc-content` attribute (`vietnamese`, `english`
 
 | Command | What it does |
 | --- | --- |
+| `jmdict <cache.sqlite> [--file PATH] [--url URL] [--prune]` | Download JMdict and import its headwords and readings into the cache (creates it if missing) |
 | `crawl <cache.sqlite> [--dry-run] [--limit N] [--min-sleep MS] [--max-sleep MS]` | Fetch Mazii/Jisho data for entries and kanji that have none |
 | `check <cache.sqlite>` | Check that every crawled response can be read, and report the ones that can't |
 | `build <cache.sqlite> <javi.sqlite>` | Build the clean dictionary database |

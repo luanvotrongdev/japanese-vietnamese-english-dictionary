@@ -18,8 +18,8 @@ const text_tail = 0x01000;
 const weight_order = 0x20000;
 const invalid_extra: u32 = std.math.maxInt(u32) >> 8;
 
-/// Serializes a trie of `keys`, each with weight 1. Duplicates are allowed.
-/// Keys must not be empty or contain NUL bytes (that would need a binary
+/// Serializes a trie of `keys`, each with weight 1. Duplicates are allowed;
+/// the list must not be empty. Keys must not be empty or contain NUL bytes (that would need a binary
 /// tail, which is not ported). The result is owned by the caller.
 pub fn build(gpa: Allocator, keys: []const []const u8) ![]u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
@@ -27,6 +27,7 @@ pub fn build(gpa: Allocator, keys: []const []const u8) ![]u8 {
     const arena = arena_state.allocator();
 
     // All keys in one buffer, so a key is a [begin, end) range into it.
+    if (keys.len == 0) return error.NoKeys;
     var total: usize = 0;
     for (keys) |k| {
         if (k.len == 0 or std.mem.indexOfScalar(u8, k, 0) != null) return error.UnsupportedKey;
@@ -551,6 +552,10 @@ fn fillCache(t: *Trie, extras: []const u32) void {
             c.link = @bitCast(c.weight);
         }
     }
+}
+
+test "rejects an empty key list" {
+    try std.testing.expectError(error.NoKeys, build(std.testing.allocator, &.{}));
 }
 
 test "matches marisa-build byte for byte" {

@@ -3,6 +3,7 @@ const Db = @import("db.zig").Db;
 const crawl = @import("crawl.zig");
 const crawler = @import("crawler.zig");
 const forms = @import("forms.zig");
+const jmdict = @import("jmdict.zig");
 const kanji = @import("kanji.zig");
 const kobo = @import("kobo.zig");
 const tags = @import("tags.zig");
@@ -11,11 +12,17 @@ const yomitan = @import("yomitan.zig");
 
 const usage =
     \\Usage:
+    \\  javi-transform jmdict <cache.sqlite> [options]         import JMdict headwords into the cache (creates it if missing)
     \\  javi-transform build <input.sqlite> <output.sqlite>   build the standardized database
     \\  javi-transform check <input.sqlite>                    parse every crawl JSON blob, report failures
     \\  javi-transform crawl <cache.sqlite> [options]          fetch Mazii/Jisho data for uncrawled entries and kanji
     \\  javi-transform kobo <javi.sqlite> <dicthtml-ja.zip>     export a Kobo dictionary from the built database
     \\  javi-transform yomitan <javi.sqlite> <lulujv.zip>       export a Yomitan dictionary from the built database
+    \\
+    \\jmdict options:
+    \\  --file PATH        import a local JMdict file (.gz or .xml) instead of downloading
+    \\  --url URL          download from URL (default: JMdict_e_examp.gz from ftp.edrdg.org)
+    \\  --prune            delete entries no longer in JMdict, with their crawl rows
     \\
     \\crawl options:
     \\  --dry-run          only count what is uncrawled
@@ -36,6 +43,15 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, cmd, "crawl") and args.len >= 3) {
         const options = parseCrawlOptions(args[3..]) orelse usageExit();
         try crawlCache(init.io, init.gpa, args[2], options);
+    } else if (std.mem.eql(u8, cmd, "jmdict") and args.len >= 3) {
+        const options = parseJmdictOptions(args[3..]) orelse usageExit();
+        const db = try Db.open(args[2], .read_write_create);
+        defer db.close();
+        const stats = try jmdict.run(init.io, init.gpa, db, options);
+        std.log.info("jmdict: {d} entries, {d} added, {d} changed, {d} no longer in JMdict ({d} deleted)", .{
+            stats.entries, stats.added, stats.changed, stats.missing, stats.pruned,
+        });
+        if (stats.missing > stats.pruned) std.log.info("rerun with --prune to delete the entries no longer in JMdict", .{});
     } else if (std.mem.eql(u8, cmd, "kobo") and args.len == 4) {
         const stats = try exportZip(kobo, init.io, init.gpa, args[2], args[3]);
         std.log.info("kobo: {d} words, {d} kanji, {d} lookup keys in {d} shards", .{
@@ -52,6 +68,26 @@ pub fn main(init: std.process.Init) !void {
 fn usageExit() noreturn {
     std.debug.print(usage, .{});
     std.process.exit(2);
+}
+
+fn parseJmdictOptions(args: []const [:0]const u8) ?jmdict.Options {
+    var options: jmdict.Options = .{};
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--prune")) {
+            options.prune = true;
+            continue;
+        }
+        i += 1;
+        if (i == args.len) return null;
+        if (std.mem.eql(u8, arg, "--file")) {
+            options.file = args[i];
+        } else if (std.mem.eql(u8, arg, "--url")) {
+            options.url = args[i];
+        } else return null;
+    }
+    return options;
 }
 
 fn parseCrawlOptions(args: []const [:0]const u8) ?crawler.Options {
@@ -95,10 +131,15 @@ fn exportZip(comptime exporter: type, io: std.Io, gpa: std.mem.Allocator, input_
     const db = try Db.open(input_path, .read_only);
     defer db.close();
     const file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
+    // Leave no partial dictionary behind when the export fails.
+    errdefer std.Io.Dir.cwd().deleteFile(io, output_path) catch {};
     defer file.close(io);
     var buffer: [64 * 1024]u8 = undefined;
     var file_writer = file.writer(io, &buffer);
-    const stats = try exporter.write(gpa, db, &file_writer.interface);
+    const stats = exporter.write(gpa, db, &file_writer.interface) catch |err| {
+        if (err == error.NoWords) std.log.err("{s} has no words with meanings: crawl the cache (`crawl`), then rerun `build`", .{input_path});
+        return err;
+    };
     try file_writer.interface.flush();
     return stats;
 }
@@ -185,6 +226,7 @@ test {
     _ = @import("lang.zig");
     _ = @import("words.zig");
     _ = @import("kanji.zig");
+    _ = @import("jmdict.zig");
     _ = @import("marisa.zig");
     _ = @import("zip.zig");
     _ = @import("entries.zig");

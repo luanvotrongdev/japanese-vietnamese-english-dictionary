@@ -46,6 +46,7 @@ pub const iso639_2b = std.StaticStringMap([]const u8).initComptime(.{
     .{ "Italian", "ita" },
     .{ "Korean", "kor" },
     .{ "Kurdish", "kur" },
+    .{ "Lao", "lao" },
     .{ "Latin", "lat" },
     .{ "Latvian", "lav" },
     .{ "Lithuanian", "lit" },

@@ -124,6 +124,7 @@ pub fn write(gpa: Allocator, db: Db, out: *Writer) !Stats {
             }
         }
     }
+    if (stats.words == 0) return error.NoWords;
     try terms.finish();
     try pitches.finish();
 
@@ -512,6 +513,16 @@ const tag_bank = blk: {
 };
 
 // ---------------------------------------------------------------- tests
+
+test "refuses to export a database with no words" {
+    const db = try Db.open(":memory:", .read_write_create);
+    defer db.close();
+    try db.exec(@embedFile("schema.sql"));
+    try db.exec("INSERT INTO entry (ent_seq) VALUES (1); INSERT INTO reading_form (ent_seq, position, text) VALUES (1, 0, 'ああ');");
+    var out: Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try std.testing.expectError(error.NoWords, write(std.testing.allocator, db, &out.writer));
+}
 
 test "Yomitan index and tag bank are valid JSON" {
     const gpa = std.testing.allocator;
