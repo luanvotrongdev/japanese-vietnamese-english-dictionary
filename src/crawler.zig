@@ -522,8 +522,8 @@ fn svgUri(html: []const u8) ?[]const u8 {
 }
 
 const named_entities = std.StaticStringMap([]const u8).initComptime(.{
-    .{ "amp", "&" },   .{ "lt", "<" },    .{ "gt", ">" },
-    .{ "quot", "\"" }, .{ "apos", "'" },  .{ "nbsp", "\u{a0}" },
+    .{ "amp", "&" },   .{ "lt", "<" },   .{ "gt", ">" },
+    .{ "quot", "\"" }, .{ "apos", "'" }, .{ "nbsp", "\u{a0}" },
 });
 
 /// Decodes numeric character references and the common named ones. Anything

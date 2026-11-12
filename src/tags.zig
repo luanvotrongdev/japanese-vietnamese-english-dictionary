@@ -313,14 +313,22 @@ pub const mazii_aliases = std.StaticStringMap([]const u8).initComptime(.{
     .{ "adv-n", "n-adv" },
     .{ "gram", "gramm" },
     .{ "osk", "osb" },
+    .{ "tm", "tradem" },
+    // Mazii's own codes with a close JMdict equivalent: conjunctive particle
+    // (けど, なら) and subsidiary verb (ちまう).
+    .{ "conj-p", "prt" },
+    .{ "sub-v", "aux-v" },
 });
 
 /// Mazii codes that carry no usable tag: retired JMdict catch-alls ("v",
-/// "adj", "v5", "iv"), kanji/reading notes ("ok", "ik") and plain noise.
+/// "adj", "v5", "iv"), kanji/reading notes ("ok", "ik", "gikun"), codes with
+/// no JMdict equivalent ("word-for-el", word-forming element) and plain noise
+/// ("verbal" comes from "verbal noun" written out in words).
 pub const mazii_ignored = std.StaticStringMap(void).initComptime(.{
-    .{"v"},   .{"v5"},   .{"adj"},    .{"iv"},       .{"ok"},
-    .{"ik"},  .{"noun"}, .{"phrase"}, .{"compound"}, .{"adverbial"},
-    .{"fig"}, .{"neg"},  .{"kanji"},
+    .{"v"},           .{"v5"},   .{"adj"},    .{"iv"},       .{"ok"},
+    .{"ik"},          .{"noun"}, .{"phrase"}, .{"compound"}, .{"adverbial"},
+    .{"fig"},         .{"neg"},  .{"kanji"},  .{"gikun"},    .{"verbal"},
+    .{"word-for-el"},
     .{"∫"},
 });
 
@@ -376,6 +384,10 @@ test "splits and classifies Mazii kind" {
     try std.testing.expectEqual(null, it.next());
 
     try std.testing.expectEqualStrings("n-adv", maziiCode("adv-n").known);
+    try std.testing.expectEqualStrings("tradem", maziiCode("tm").known);
+    try std.testing.expectEqualStrings("prt", maziiCode("conj-p").known);
+    try std.testing.expectEqualStrings("aux-v", maziiCode("sub-v").known);
+    try std.testing.expectEqual(MaziiCode.ignored, maziiCode("gikun"));
     try std.testing.expectEqual(MaziiCode.ignored, maziiCode("noun"));
     try std.testing.expectEqual(MaziiCode.unknown, maziiCode("bogus"));
 }
