@@ -572,7 +572,7 @@ test "renders Yomitan entries" {
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, content, .{});
     const t = std.testing;
     try t.expectEqual(4, parsed.array.items.len); // word types, Vietnamese, label, English
-    try t.expect(std.mem.indexOf(u8, content, "{\"tag\":\"div\",\"lang\":\"vi\",\"data\":{\"content\":\"vietnamese\"},\"content\":[\"ăn\",") != null);
+    try t.expect(std.mem.indexOf(u8, content, "{\"tag\":\"div\",\"lang\":\"vi\",\"data\":{\"content\":\"vietnamese\"},\"content\":[\"ăn; xơi nhé.\",") != null);
     try t.expect(std.mem.indexOf(u8, content, "\"to live on; to subsist on\"") != null);
 
     const rules = inflectionRules(taberu);

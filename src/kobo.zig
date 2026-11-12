@@ -553,7 +553,7 @@ test "renders Kobo entries" {
     try t.expect(std.mem.indexOf(u8, html, "<b>食べる</b> 【たべる】 <font color=\"gray\">[2]</font> <small><font color=\"gray\">N5 · thông dụng</font></small>") != null);
     try t.expect(std.mem.indexOf(u8, html, "Cách viết khác: 喰べる") != null);
     try t.expect(std.mem.indexOf(u8, html, "<p><i>Động từ nhóm 2 · tha động từ</i></p>") != null);
-    try t.expect(std.mem.indexOf(u8, html, "<li>ăn<br/><small>食べるな。<br/><i>Cấm ăn.</i></small>") != null);
+    try t.expect(std.mem.indexOf(u8, html, "<li>ăn; xơi nhé.<br/><small>食べるな。<br/><i>Cấm ăn.</i></small>") != null);
     // Parts of speech show again when they change; notes follow the glosses.
     try t.expect(std.mem.indexOf(u8, html, "<i>Ichidan verb, Transitive verb</i></font></small><br/>to eat</li>") != null);
     try t.expect(std.mem.indexOf(u8, html, "<i>Ichidan verb</i></font></small><br/>to live on; to subsist on <small><font color=\"gray\">(Colloquial; colloquial)</font></small></li>") != null);

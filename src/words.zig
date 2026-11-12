@@ -430,7 +430,7 @@ fn splitGlosses(a: Allocator, mean: []const u8) ![]const []const u8 {
 
 /// Mazii often ends a gloss with a stray period ("ăn."). Keeps "v.v." (etc.)
 /// and ellipses.
-fn dropFinalPeriod(s: []const u8) []const u8 {
+pub fn dropFinalPeriod(s: []const u8) []const u8 {
     if (!std.mem.endsWith(u8, s, ".")) return s;
     if (std.mem.endsWith(u8, s, "v.v.") or std.mem.endsWith(u8, s, "..")) return s;
     return trim(s[0 .. s.len - 1]);
@@ -457,11 +457,11 @@ fn uniqueEntry(stmt: Stmt, args: anytype) !?i64 {
     return ent_seq;
 }
 
-fn trim(s: []const u8) []const u8 {
+pub fn trim(s: []const u8) []const u8 {
     return std.mem.trim(u8, s, " \t\r\n");
 }
 
-fn nonEmpty(s: ?[]const u8) ?[]const u8 {
+pub fn nonEmpty(s: ?[]const u8) ?[]const u8 {
     const t = trim(s orelse return null);
     return if (t.len == 0) null else t;
 }
@@ -481,19 +481,19 @@ fn containsString(list: []const []const u8, s: []const u8) bool {
 }
 
 /// Labels and codes with no mapping, counted so the tables can be extended.
-const Unmapped = struct {
+pub const Unmapped = struct {
     arena: std.heap.ArenaAllocator,
     counts: std.StringArrayHashMapUnmanaged(usize) = .empty,
 
-    fn init(gpa: Allocator) Unmapped {
+    pub fn init(gpa: Allocator) Unmapped {
         return .{ .arena = .init(gpa) };
     }
 
-    fn deinit(u: *Unmapped) void {
+    pub fn deinit(u: *Unmapped) void {
         u.arena.deinit();
     }
 
-    fn add(u: *Unmapped, kind: []const u8, value: []const u8) !void {
+    pub fn add(u: *Unmapped, kind: []const u8, value: []const u8) !void {
         const a = u.arena.allocator();
         const key = try std.fmt.allocPrint(a, "{s}: {s}", .{ kind, value });
         const entry = try u.counts.getOrPut(a, key);
@@ -501,7 +501,7 @@ const Unmapped = struct {
         entry.value_ptr.* += 1;
     }
 
-    fn report(u: *Unmapped) void {
+    pub fn report(u: *Unmapped) void {
         const ByCountDesc = struct {
             values: []const usize,
             pub fn lessThan(s: @This(), a: usize, b: usize) bool {
@@ -531,7 +531,7 @@ test "splitGlosses and stripQuotes" {
     try std.testing.expectEqualStrings("Holanda", stripQuotes("“Holanda”").?);
 }
 
-fn queryInt(db: Db, sql: []const u8) !i64 {
+pub fn queryInt(db: Db, sql: []const u8) !i64 {
     const stmt = try db.prepare(sql);
     defer stmt.deinit();
     try std.testing.expect(try stmt.step());

@@ -126,7 +126,7 @@ CREATE TABLE kanji (
   literal       TEXT PRIMARY KEY,      -- the character
   stroke_count  INTEGER,
   grade         INTEGER,               -- 'grade 4' -> 4, 'junior high' -> 8 (KANJIDIC style)
-  jlpt          INTEGER CHECK (jlpt BETWEEN 1 AND 5),
+  jlpt          INTEGER CHECK (jlpt BETWEEN 1 AND 5),   -- Mazii level, else Jisho jlptLevel ('N3' -> 3)
   freq_rank     INTEGER,               -- Jisho newspaperFrequencyRank
   han_viet      TEXT,                  -- Mazii mean, e.g. 'THUẬN'
   radical       TEXT REFERENCES radical(symbol),
@@ -150,7 +150,7 @@ CREATE TABLE kanji_meaning (
   PRIMARY KEY (literal, lang, position)
 );
 
--- Visual parts (Jisho parts[]) plus Hán Việt names where Mazii compDetail has them.
+-- Mazii compDetail (components with Hán Việt names), else Jisho parts[] (no names).
 CREATE TABLE kanji_component (
   literal    TEXT NOT NULL REFERENCES kanji(literal) ON DELETE CASCADE,
   position   INTEGER NOT NULL,

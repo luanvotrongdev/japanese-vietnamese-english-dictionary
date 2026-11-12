@@ -2,12 +2,17 @@
 //! into the shape the Kobo and Yomitan exporters render. Port of the old Bun
 //! exporter's entries.ts, which read the raw crawl JSON instead.
 //!
-//! Text is used as stored: cleanup belongs in the transform (docs/known-issues.md).
+//! Display text goes through `text.clean` (NFC, no invisible or control
+//! characters, line breaks collapsed), as the old exporter did; Vietnamese
+//! text also loses the space Mazii leaves before punctuation, and values with
+//! no letter or digit are dropped. The transform does not clean text yet
+//! (docs/known-issues.md #6–#8).
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Db = @import("db.zig").Db;
 const Stmt = @import("db.zig").Stmt;
+const text = @import("text.zig");
 
 pub const max_examples_per_sense = 2;
 pub const max_kanji_examples = 4;
@@ -285,10 +290,9 @@ pub const Reader = struct {
             const list = try r.examples.getOrPut(a, examples.int(0));
             if (!list.found_existing) list.value_ptr.* = .empty;
             if (list.value_ptr.items.len == max_examples_per_sense) continue;
-            try list.value_ptr.append(a, .{
-                .japanese = try a.dupe(u8, examples.text(1).?),
-                .vietnamese = try a.dupe(u8, examples.text(2).?),
-            });
+            const japanese = try display(a, examples.text(1).?, .plain) orelse continue;
+            const vietnamese = try display(a, examples.text(2).?, .vietnamese) orelse continue;
+            try list.value_ptr.append(a, .{ .japanese = japanese, .vietnamese = vietnamese });
         }
 
         const restrictions = try db.prepare("SELECT reading_id, kanji_id FROM reading_restriction");
@@ -355,7 +359,7 @@ pub const Reader = struct {
                 try senses.append(a, .{
                     .id = s.int(0),
                     .mazii = std.mem.eql(u8, s.text(1).?, "mazii"),
-                    .info = if (s.text(2)) |t| try a.dupe(u8, t) else null,
+                    .info = try displayOpt(a, s.text(2), .plain),
                 });
             }
         }
@@ -365,7 +369,7 @@ pub const Reader = struct {
         var word_types: std.ArrayList([]const u8) = .empty;
         var tag_codes: std.ArrayList([]const u8) = .empty;
         for (senses.items) |sense| {
-            const glosses = try r.loadGlosses(a, sense.id);
+            const glosses = try r.loadGlosses(a, sense.id, if (sense.mazii) .vietnamese else .plain);
             if (glosses.len == 0) continue;
 
             var pos: std.ArrayList([]const u8) = .empty;
@@ -412,12 +416,17 @@ pub const Reader = struct {
         };
     }
 
-    fn loadGlosses(r: *Reader, a: Allocator, sense_id: i64) ![]const []const u8 {
+    /// Cleaned glosses, without empty ones or repeats (ignoring ASCII case).
+    fn loadGlosses(r: *Reader, a: Allocator, sense_id: i64, kind: TextKind) ![]const []const u8 {
         var list: std.ArrayList([]const u8) = .empty;
         const s = r.glosses_of;
         try s.bindAll(.{sense_id});
         defer s.reset();
-        while (try s.step()) try list.append(a, try a.dupe(u8, s.text(0).?));
+        next: while (try s.step()) {
+            const gloss = try display(a, s.text(0).?, kind) orelse continue;
+            for (list.items) |seen| if (std.ascii.eqlIgnoreCase(seen, gloss)) continue :next;
+            try list.append(a, gloss);
+        }
         return list.items;
     }
 
@@ -428,14 +437,14 @@ pub const Reader = struct {
             const literal = try a.dupe(u8, s.text(0).?);
             var k: Kanji = .{
                 .literal = literal,
-                .han_viet = try dupeOpt(a, s.text(1)),
+                .han_viet = try displayOpt(a, s.text(1), .plain),
                 .jlpt = if (s.text(2) == null) null else @intCast(s.int(2)),
                 .strokes = if (s.text(3) == null) null else s.int(3),
                 .grade = if (s.text(4) == null) null else s.int(4),
                 .freq_rank = if (s.text(5) == null) null else s.int(5),
-                .radical = try dupeOpt(a, s.text(6)),
-                .radical_meaning = try dupeOpt(a, s.text(7)),
-                .mnemonic = try dupeOpt(a, s.text(8)),
+                .radical = try displayOpt(a, s.text(6), .plain),
+                .radical_meaning = try displayOpt(a, s.text(7), .plain),
+                .mnemonic = try displayOpt(a, s.text(8), .vietnamese),
                 .vietnamese = &.{},
                 .english = &.{},
                 .onyomi = &.{},
@@ -463,7 +472,7 @@ pub const Reader = struct {
                 defer c.reset();
                 while (try c.step()) try components.append(a, .{
                     .kanji = try a.dupe(u8, c.text(0).?),
-                    .han_viet = try dupeOpt(a, c.text(1)),
+                    .han_viet = try displayOpt(a, c.text(1), .plain),
                 });
             }
             k.components = components.items;
@@ -474,10 +483,10 @@ pub const Reader = struct {
                 try e.bindAll(.{literal});
                 defer e.reset();
                 while (try e.step()) try examples.append(a, .{
-                    .word = try a.dupe(u8, e.text(0).?),
-                    .reading = try dupeOpt(a, e.text(1)),
-                    .han_viet = try dupeOpt(a, e.text(2)),
-                    .meaning = try a.dupe(u8, e.text(3).?),
+                    .word = try display(a, e.text(0).?, .plain) orelse continue,
+                    .reading = try displayOpt(a, e.text(1), .plain),
+                    .han_viet = try displayOpt(a, e.text(2), .plain),
+                    .meaning = try display(a, e.text(3).?, .vietnamese) orelse continue,
                 });
             }
             k.examples = examples.items;
@@ -495,12 +504,22 @@ fn forEachPair(s: Stmt, literal: []const u8, a: Allocator, first: *std.ArrayList
     defer s.reset();
     while (try s.step()) {
         const list = if (std.mem.eql(u8, s.text(0).?, first_kind)) first else second;
-        try list.append(a, try a.dupe(u8, s.text(1).?));
+        try list.append(a, try display(a, s.text(1).?, .plain) orelse continue);
     }
 }
 
-fn dupeOpt(a: Allocator, s: ?[]const u8) !?[]const u8 {
-    return if (s) |t| try a.dupe(u8, t) else null;
+const TextKind = enum { plain, vietnamese };
+
+/// A copy of `raw` cleaned for display, or null when it has no letter or
+/// digit ("*", "_"). `raw` may be SQLite's buffer, so it is copied first.
+fn display(a: Allocator, raw: []const u8, kind: TextKind) !?[]const u8 {
+    var t = try text.clean(a, try a.dupe(u8, raw));
+    if (kind == .vietnamese) t = try text.tidy(a, t);
+    return if (text.hasText(t)) t else null;
+}
+
+fn displayOpt(a: Allocator, raw: ?[]const u8, kind: TextKind) !?[]const u8 {
+    return display(a, raw orelse return null, kind);
 }
 
 fn containsString(list: []const []const u8, s: []const u8) bool {
@@ -531,8 +550,8 @@ pub fn testDatabase() !Db {
         \\  (1, 1358280, 'jmdict', 'en', 0, NULL), (2, 1358280, 'jmdict', 'en', 1, 'colloquial'),
         \\  (3, 1358280, 'mazii', 'vi', 0, NULL), (4, 1358280, 'wikipedia', 'en', 0, NULL),
         \\  (5, 1000320, 'jmdict', 'en', 0, NULL), (6, 1000330, 'jmdict', 'en', 0, NULL);
-        \\INSERT INTO gloss (sense_id, position, text) VALUES (1, 0, 'to eat'), (2, 0, 'to live on'), (2, 1, 'to subsist on'),
-        \\  (3, 0, 'ăn'), (4, 0, 'Taberu'), (5, 0, 'like that'), (6, 0, 'A <B> & C');
+        \\INSERT INTO gloss (sense_id, position, text) VALUES (1, 0, 'to eat'), (1, 1, 'To eat'), (2, 0, 'to live on'), (2, 1, 'to subsist on'),
+        \\  (3, 0, 'a' || char(774) || 'n'), (3, 1, ' *'), (3, 2, 'xơi' || char(8203, 13, 10) || ' nhé .'), (4, 0, 'Taberu'), (5, 0, 'like that'), (6, 0, 'A <B> & C');
         \\INSERT INTO sense_tag (sense_id, tag_code) VALUES (1, 'v1'), (1, 'vt'), (2, 'v1'), (2, 'col'), (3, 'v1'), (3, 'vt'),
         \\  (5, 'adv'), (6, 'n');
         \\INSERT INTO example (sense_id, position, ja, translation, lang) VALUES
@@ -587,6 +606,11 @@ test "reads words and kanji" {
     try t.expectEqual(2, taberu.pitch().?);
     try t.expectEqual(5, taberu.jlpt.?);
     try t.expectEqual(1, taberu.vietnamese.len);
+    // Cleaned: NFC, "*" dropped, invisible characters and line breaks removed.
+    try t.expectEqual(2, taberu.vietnamese[0].glosses.len);
+    try t.expectEqualStrings("ăn", taberu.vietnamese[0].glosses[0]);
+    try t.expectEqualStrings("xơi nhé.", taberu.vietnamese[0].glosses[1]);
+    try t.expectEqual(1, taberu.english[0].glosses.len); // "To eat" repeats "to eat"
     try t.expectEqual(2, taberu.vietnamese[0].examples.len);
     try t.expectEqual(2, taberu.english.len); // the Wikipedia sense is left out
     try t.expectEqualStrings("Ichidan verb", taberu.english[0].parts_of_speech[0]);

@@ -3,6 +3,7 @@ const Db = @import("db.zig").Db;
 const crawl = @import("crawl.zig");
 const crawler = @import("crawler.zig");
 const forms = @import("forms.zig");
+const kanji = @import("kanji.zig");
 const kobo = @import("kobo.zig");
 const tags = @import("tags.zig");
 const words = @import("words.zig");
@@ -128,7 +129,10 @@ fn build(io: std.Io, gpa: std.mem.Allocator, input_path: [:0]const u8, output_pa
     std.log.info("word rows: {d}, matched Jisho: {d}, matched Mazii: {d}, Mazii skipped as homograph: {d}", .{
         word_stats.rows, word_stats.jisho_matched, word_stats.mazii_matched, word_stats.mazii_homographs_skipped,
     });
-    // TODO: kanji tables from raw_kanji_crawl_json.
+    const kanji_stats = try kanji.transform(gpa, src, out);
+    std.log.info("kanji rows: {d}, with Jisho: {d}, with Mazii: {d}, examples: {d} ({d} linked to an entry)", .{
+        kanji_stats.rows, kanji_stats.with_jisho, kanji_stats.with_mazii, kanji_stats.examples, kanji_stats.examples_linked,
+    });
     try out.exec("COMMIT");
 }
 
@@ -180,9 +184,11 @@ test {
     _ = @import("tags.zig");
     _ = @import("lang.zig");
     _ = @import("words.zig");
+    _ = @import("kanji.zig");
     _ = @import("marisa.zig");
     _ = @import("zip.zig");
     _ = @import("entries.zig");
     _ = @import("kobo.zig");
     _ = @import("yomitan.zig");
+    _ = @import("text.zig");
 }

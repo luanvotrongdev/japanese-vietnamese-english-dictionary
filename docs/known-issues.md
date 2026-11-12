@@ -70,6 +70,8 @@ When two JMdict entries have exactly the same spellings and readings, `pickJisho
 
 Fixes #5–#8 belong in one shared text-cleaning function applied to every Mazii string (glosses, `summary_vi`, example fields) before splitting or storing. Japanese spellings (`kanji_form`, `reading_form`) come from JMdict and stay untouched.
 
+The kanji step (`src/kanji.zig`) stores Mazii kanji text with the same problems and should use the same function. `tools/scan.py` does not check the kanji tables yet; a one-off check on 2026-11-12 found 408 Vietnamese `kanji_example` meanings not in NFC, double spaces in 157 `kanji_meaning` rows, 156 `mnemonic_vi` values and 141 example meanings, and 50 example meanings with line breaks or zero-width characters. `src/kanji.zig` already strips the `<b>` tags from `detail` and `tips.vi`. Separately, 30 Mazii kanji example readings list two readings joined by a comma (`にじゅうび,はつか`); those examples are stored but not linked to an entry.
+
 ### 5. HTML tags, entities and Mazii subject labels
 
 - Entities: `&amp;` / `&amp` about 350 times, plus `&nbsp;` and `&times;`.
@@ -126,7 +128,7 @@ Some Mazii text uses decomposed accents (base letter + combining mark), so it wo
 
 ## Effect on the Kobo and Yomitan exports
 
-`kobo` and `yomitan` render text as stored, so the open problems above show up in both dictionaries. The old Bun exporter cleaned some of them at export time (NFC, zero-width characters, a space before punctuation, repeated English glosses); here they belong in the transform. Until the kanji step fills the kanji tables, neither export has kanji cards. Name senses (#1) show their name type as a note, for example "(Place)", instead of as a part of speech.
+Like the old Bun exporter, `kobo` and `yomitan` clean text at export time (`src/text.zig`): NFC, invisible and control characters, line breaks, a space before punctuation, placeholder values and repeated glosses. So #6 and #7 and the gloss part of #9 don't show in the dictionaries, but they are still in `javi.sqlite` until the transform does the same cleanup. The other problems above do show up in both dictionaries. Both exports have kanji cards from the kanji step (5,857 of 5,994 kanji; the rest have no Hán Việt reading and no meaning). Name senses (#1) show their name type as a note, for example "(Place)", instead of as a part of speech.
 
 ## Not fixable from this data
 

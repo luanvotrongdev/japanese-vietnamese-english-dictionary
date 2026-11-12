@@ -6,3 +6,6 @@
 zig-out/
 .zig-cache/
 /ja-vi-jmdict
+lulujv.zip
+dicthtml-ja.zip
+*.log

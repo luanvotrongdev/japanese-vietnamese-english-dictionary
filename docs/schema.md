@@ -46,10 +46,14 @@ Both crawls returned search results for a form, not the exact entry, so each row
 - JLPT: `'jlpt-n3'` (words) and `'N3'` (kanji) become the integer `3`. A word listed at several levels keeps the easiest (largest number).
 - The JMdict metadata entry (`ent_seq` 9999999, "ＪＭｄｉｃｔ") is skipped.
 - Kanji readings: take them from Jisho (`onyomi`, `kunyomi`), which already uses KANJIDIC notation (`ひび.く`). Use Mazii's space-separated `on` / `kun` strings only when Jisho has none.
+- Kanji JLPT: Mazii `level[]` first, then Jisho `jlptLevel`. In the full data the two never disagree when both are set (2,205 kanji); Mazii has a level for 19 kanji that Jisho lacks, Jisho for 1 that Mazii lacks.
+- Kanji stroke count and frequency: Jisho `strokeCount` / `newspaperFrequencyRank` (KANJIDIC values), falling back to Mazii `stroke_count` / `freq`. Grade: Jisho `taughtIn`, `'grade 4'` → 4, `'junior high'` → 8; other values are logged as `unmapped kanji grade`.
+- Kanji meanings: Vietnamese = Mazii `detail` split on `##`, English = Jisho `meaning` split on `', '`. Mazii `detail` and `tips.vi` contain `<b>` / `</ b>` tags, which are removed.
+- Kanji components: Mazii `compDetail` (the meaningful breakdown, with Hán Việt names: 響 → 音 ÂM, 郷 HƯƠNG), else Jisho `parts[]` (KRADFILE elements, no names) when Mazii has none.
+- Kanji examples: Mazii `examples` (no reading type), then `example_on` / `example_kun`, both `lang = 'vi'`; then Jisho `onyomiExamples` / `kunyomiExamples` (`lang = 'en'`). Examples with no meaning are skipped, and so is a trailing period on Mazii meanings, as for glosses. `ent_seq` is set when the word and reading match exactly one entry; Jisho writes on'yomi example readings in katakana, so a reading that matches nothing is retried in hiragana.
 - Mazii `pronunciation[]`: copy `accent` onto the `reading_form` whose text equals `kana`.
 
 ## Open questions
 
-- **Kanji JLPT source:** Jisho (`jlptLevel`) and Mazii (`level[]`) can disagree. Pick one as primary.
 - **Unicode NFC:** not applied yet; Zig's standard library has no normalization, so it needs a library such as `zg`.
 - **Search:** add an FTS5 table over `gloss.text` if the app needs Vietnamese or English reverse lookup.
