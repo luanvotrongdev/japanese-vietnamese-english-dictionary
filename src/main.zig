@@ -1,6 +1,7 @@
 const std = @import("std");
 const Db = @import("db.zig").Db;
 const crawl = @import("crawl.zig");
+const crawler = @import("crawler.zig");
 const forms = @import("forms.zig");
 const tags = @import("tags.zig");
 const words = @import("words.zig");
@@ -9,6 +10,13 @@ const usage =
     \\Usage:
     \\  javi-transform build <input.sqlite> <output.sqlite>   build the standardized database
     \\  javi-transform check <input.sqlite>                    parse every crawl JSON blob, report failures
+    \\  javi-transform crawl <cache.sqlite> [options]          fetch Mazii/Jisho data for uncrawled entries and kanji
+    \\
+    \\crawl options:
+    \\  --dry-run          only count what is uncrawled
+    \\  --limit N          stop after N new rows
+    \\  --min-sleep MS     shortest pause before each item (default 500)
+    \\  --max-sleep MS     longest pause before each item (default 1500)
     \\
 ;
 
@@ -20,10 +28,50 @@ pub fn main(init: std.process.Init) !void {
         try build(init.io, init.gpa, args[2], args[3]);
     } else if (std.mem.eql(u8, cmd, "check") and args.len == 3) {
         try check(init.gpa, args[2]);
-    } else {
-        std.debug.print(usage, .{});
-        std.process.exit(2);
+    } else if (std.mem.eql(u8, cmd, "crawl") and args.len >= 3) {
+        const options = parseCrawlOptions(args[3..]) orelse usageExit();
+        try crawlCache(init.io, init.gpa, args[2], options);
+    } else usageExit();
+}
+
+fn usageExit() noreturn {
+    std.debug.print(usage, .{});
+    std.process.exit(2);
+}
+
+fn parseCrawlOptions(args: []const [:0]const u8) ?crawler.Options {
+    var options: crawler.Options = .{};
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--dry-run")) {
+            options.dry_run = true;
+            continue;
+        }
+        i += 1;
+        if (i == args.len) return null;
+        const value = std.fmt.parseInt(u32, args[i], 10) catch return null;
+        if (std.mem.eql(u8, arg, "--limit")) {
+            options.limit = value;
+        } else if (std.mem.eql(u8, arg, "--min-sleep")) {
+            options.min_sleep_ms = value;
+        } else if (std.mem.eql(u8, arg, "--max-sleep")) {
+            options.max_sleep_ms = value;
+        } else return null;
     }
+    if (options.max_sleep_ms < options.min_sleep_ms) options.max_sleep_ms = options.min_sleep_ms;
+    return options;
+}
+
+/// The one command that writes to the cache: it only inserts rows for entries
+/// and kanji that have none.
+fn crawlCache(io: std.Io, gpa: std.mem.Allocator, cache_path: [:0]const u8, options: crawler.Options) !void {
+    const db = try Db.open(cache_path, if (options.dry_run) .read_only else .read_write);
+    defer db.close();
+    const stats = try crawler.run(io, gpa, db, options);
+    if (!options.dry_run) std.log.info("crawled {d} of {d} kanji, {d} of {d} entries", .{
+        stats.kanji_crawled, stats.kanji_missing, stats.words_crawled, stats.words_missing,
+    });
 }
 
 fn build(io: std.Io, gpa: std.mem.Allocator, input_path: [:0]const u8, output_path: [:0]const u8) !void {
@@ -100,6 +148,7 @@ fn checkTable(comptime T: type, gpa: std.mem.Allocator, src: Db, sql: []const u8
 test {
     _ = @import("db.zig");
     _ = @import("crawl.zig");
+    _ = @import("crawler.zig");
     _ = @import("tags.zig");
     _ = @import("lang.zig");
     _ = @import("words.zig");

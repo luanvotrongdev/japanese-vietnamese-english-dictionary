@@ -234,7 +234,7 @@ const Context = struct {
 
         var next_position: i64 = 0;
         for (word.means) |mean| {
-            const glosses = try splitGlosses(ctx.arena.allocator(), mean.mean);
+            const glosses = try splitGlosses(ctx.arena.allocator(), mean.mean orelse continue);
             if (glosses.len == 0) continue;
 
             try ctx.st.insert_sense.run(.{ ent_seq, "mazii", "vi", next_position, null });

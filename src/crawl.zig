@@ -30,7 +30,8 @@ pub const WordBlob = struct {
     };
 
     pub const Mean = struct {
-        mean: []const u8,
+        /// Null in a few rows: Mazii has a meaning slot with no text.
+        mean: ?[]const u8 = null,
         /// Usually a code string like "n, vs". A few rows hold `false` or a list
         /// of Vietnamese labels such as ["danh từ"].
         kind: std.json.Value = .null,

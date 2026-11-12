@@ -8,11 +8,12 @@ pub const Error = error{SqliteError};
 pub const Db = struct {
     handle: *c.sqlite3,
 
-    pub const Mode = enum { read_only, read_write_create };
+    pub const Mode = enum { read_only, read_write, read_write_create };
 
     pub fn open(path: [:0]const u8, mode: Mode) Error!Db {
         const flags: c_int = switch (mode) {
             .read_only => c.SQLITE_OPEN_READONLY,
+            .read_write => c.SQLITE_OPEN_READWRITE,
             .read_write_create => c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE,
         };
         var handle: ?*c.sqlite3 = null;
