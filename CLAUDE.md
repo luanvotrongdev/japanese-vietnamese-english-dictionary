@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-This repository transforms and standardizes a crawled Japanese dictionary cache (`jmdict-cache.sqlite`) into a clean, normalized database. The target is a Japanese → Vietnamese (and English) dictionary ("javi"). The transform is written in Zig. The only input is the SQLite file at the repo root.
+This repository transforms and standardizes a crawled Japanese dictionary cache (`jmdict-cache.sqlite`) into a clean, normalized database. The target is a Japanese → Vietnamese (and English) dictionary ("javi"). The transform is written in Zig. The only input is the SQLite file at the repo root. The same binary exports the built database (`javi.sqlite`) as a Kobo dictionary and a Yomitan dictionary.
 
 ## Commands
 
@@ -19,11 +19,13 @@ zig-out/bin/javi-transform check jmdict-cache.sqlite              # parse every 
 zig-out/bin/javi-transform build jmdict-cache.sqlite javi.sqlite  # rebuild the output DB from scratch
 zig-out/bin/javi-transform crawl jmdict-cache.sqlite --dry-run    # count entries and kanji with no crawl row
 zig-out/bin/javi-transform crawl jmdict-cache.sqlite              # fetch them from Mazii/Jisho (writes to the cache)
+zig-out/bin/javi-transform kobo javi.sqlite dicthtml-ja.zip       # Kobo dictionary (copy to KOBOeReader/.kobo/custom-dict/)
+zig-out/bin/javi-transform yomitan javi.sqlite lulujv.zip         # Yomitan dictionary
 ```
 
 After a `build`, `python -I tools/scan.py javi.sqlite` runs data-quality checks on the output. Open problems, with sizes and planned fixes, are listed in `docs/known-issues.md`; update it as issues are fixed.
 
-Run `check` after any change to `src/crawl.zig`. It reports failing row ids and byte offsets. In ReleaseFast, `check` takes about 8 s and `build` about 45 s on the full data.
+Run `check` after any change to `src/crawl.zig`. It reports failing row ids and byte offsets. In ReleaseFast, `check` takes about 8 s and `build` about 45 s on the full data; `kobo` takes about 10 s and `yomitan` about 6 s.
 
 ## Code layout
 
@@ -33,6 +35,7 @@ Run `check` after any change to `src/crawl.zig`. It reports failing row ids and 
 - **Word step:** `src/words.zig` reads each crawl row, picks the matching Jisho result and Mazii word (`pickJisho` / `pickMazii`), and writes entry fields, senses, glosses, tags, examples, cross-references, relations, pitch accents and reading restrictions. Labels or codes it can't map are logged as `unmapped ...` warnings at the end of `build`. Add them to `src/tags.zig` (or `src/lang.zig` for loanword languages) rather than ignoring them. The `transforms crawl rows` test runs sample JSON through the whole step against an in-memory database.
 - **Crawler:** `src/crawler.zig` (`crawl` command) is a port of the old Bun crawler. It only fills gaps: entries with no `raw_word_crawl_json` row (searched by first kanji spelling, else first reading) and kanji in any `keb` with no `raw_kanji_crawl_json` row. Kanji go first, then entries by `entry.id`. Each row is committed on its own, so it can be stopped with Ctrl+C and rerun. A failed item is retried with a doubling pause, and stops the run after 8 attempts (about 40 minutes). Options: `--limit N`, `--min-sleep MS`, `--max-sleep MS` (default pause 500–1500 ms per item; the full gap takes many hours). Jisho has no kanji API, so the kanji page HTML is scraped into the same fields the `unofficial-jisho-api` package produced. Requests have no read timeout.
 - **JSON:** `src/crawl.zig` holds typed structs for both blob kinds, parsed with `std.json` (`ignore_unknown_fields`). Fields whose JSON type varies between rows use `std.json.Value`. Parse each row into an arena that is reset per row.
+- **Exporters:** port of the old Bun exporters in `ja-vi-jmdict/` (a separate, git-ignored checkout kept for reference), reading `javi.sqlite` instead of the crawl JSON. `src/entries.zig` reads words and kanji into structs (Wikipedia senses left out, at most 2 examples per Vietnamese sense, Vietnamese word-type labels for Mazii tags). `src/kobo.zig` renders HTML and writes the dictzip directly, with no dictgen: Kobo's Japanese lookup needs its own shard names (`shardPrefix`: 1 character for kanji words, 2 for kana, after [kobo_jp_dict](https://github.com/cessen/kobo_jp_dict)), all-kana keys also get a katakana key, and entries sharing a key are merged (common words, other words, kanji). The inline Kobo Nickel font is required: Kobo's default Georgia lacks Vietnamese letters. `src/marisa.zig` builds the dictzip's `words` index; it is a Zig port of marisa-trie's build path and its test checks bytes against `marisa-build`. `src/yomitan.zig` writes the format-3 banks (one term per kanji × reading pair, respecting reading restrictions; inflection rules; pitch meta; ★/JLPT tags). `src/zip.zig` is a minimal ZIP writer (store or deflate, no ZIP64). Exporters render text as stored: fix text problems in the transform, not here. Kanji cards come from the kanji tables, which stay empty until the kanji step exists.
 - **Tags:** `src/tags.zig` maps Jisho labels to JMdict entity codes with a compile-time `StaticStringMap`, normalizes Mazii codes (aliases plus an ignore list), and fills the `tag` table. `sense_tag` has a foreign key to `tag`, so a code must be in `by_jisho_label` before it can be stored.
 
 ## Source database: `jmdict-cache.sqlite`

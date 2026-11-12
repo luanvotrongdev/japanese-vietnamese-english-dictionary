@@ -3,14 +3,18 @@ const Db = @import("db.zig").Db;
 const crawl = @import("crawl.zig");
 const crawler = @import("crawler.zig");
 const forms = @import("forms.zig");
+const kobo = @import("kobo.zig");
 const tags = @import("tags.zig");
 const words = @import("words.zig");
+const yomitan = @import("yomitan.zig");
 
 const usage =
     \\Usage:
     \\  javi-transform build <input.sqlite> <output.sqlite>   build the standardized database
     \\  javi-transform check <input.sqlite>                    parse every crawl JSON blob, report failures
     \\  javi-transform crawl <cache.sqlite> [options]          fetch Mazii/Jisho data for uncrawled entries and kanji
+    \\  javi-transform kobo <javi.sqlite> <dicthtml-ja.zip>     export a Kobo dictionary from the built database
+    \\  javi-transform yomitan <javi.sqlite> <lulujv.zip>       export a Yomitan dictionary from the built database
     \\
     \\crawl options:
     \\  --dry-run          only count what is uncrawled
@@ -31,6 +35,16 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, cmd, "crawl") and args.len >= 3) {
         const options = parseCrawlOptions(args[3..]) orelse usageExit();
         try crawlCache(init.io, init.gpa, args[2], options);
+    } else if (std.mem.eql(u8, cmd, "kobo") and args.len == 4) {
+        const stats = try exportZip(kobo, init.io, init.gpa, args[2], args[3]);
+        std.log.info("kobo: {d} words, {d} kanji, {d} lookup keys in {d} shards", .{
+            stats.words, stats.kanji, stats.keys, stats.shards,
+        });
+    } else if (std.mem.eql(u8, cmd, "yomitan") and args.len == 4) {
+        const stats = try exportZip(yomitan, init.io, init.gpa, args[2], args[3]);
+        std.log.info("yomitan: {d} words as {d} terms, {d} pitch accents, {d} kanji", .{
+            stats.words, stats.terms, stats.pitches, stats.kanji,
+        });
     } else usageExit();
 }
 
@@ -72,6 +86,20 @@ fn crawlCache(io: std.Io, gpa: std.mem.Allocator, cache_path: [:0]const u8, opti
     if (!options.dry_run) std.log.info("crawled {d} of {d} kanji, {d} of {d} entries", .{
         stats.kanji_crawled, stats.kanji_missing, stats.words_crawled, stats.words_missing,
     });
+}
+
+/// Runs an exporter (kobo.zig or yomitan.zig) on the built database and
+/// writes its ZIP to `output_path`.
+fn exportZip(comptime exporter: type, io: std.Io, gpa: std.mem.Allocator, input_path: [:0]const u8, output_path: []const u8) !exporter.Stats {
+    const db = try Db.open(input_path, .read_only);
+    defer db.close();
+    const file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
+    defer file.close(io);
+    var buffer: [64 * 1024]u8 = undefined;
+    var file_writer = file.writer(io, &buffer);
+    const stats = try exporter.write(gpa, db, &file_writer.interface);
+    try file_writer.interface.flush();
+    return stats;
 }
 
 fn build(io: std.Io, gpa: std.mem.Allocator, input_path: [:0]const u8, output_path: [:0]const u8) !void {
@@ -152,4 +180,9 @@ test {
     _ = @import("tags.zig");
     _ = @import("lang.zig");
     _ = @import("words.zig");
+    _ = @import("marisa.zig");
+    _ = @import("zip.zig");
+    _ = @import("entries.zig");
+    _ = @import("kobo.zig");
+    _ = @import("yomitan.zig");
 }

@@ -124,6 +124,10 @@ Some Mazii text uses decomposed accents (base letter + combining mark), so it wo
 
 **Fix:** keep them, or store NULL when the reading contains kanji. Low value either way.
 
+## Effect on the Kobo and Yomitan exports
+
+`kobo` and `yomitan` render text as stored, so the open problems above show up in both dictionaries. The old Bun exporter cleaned some of them at export time (NFC, zero-width characters, a space before punctuation, repeated English glosses); here they belong in the transform. Until the kanji step fills the kanji tables, neither export has kanji cards. Name senses (#1) show their name type as a note, for example "(Place)", instead of as a part of speech.
+
 ## Not fixable from this data
 
 - **24,043 entries have no senses.** They have no row in `raw_word_crawl_json`, so they were never crawled. Recrawling is the only fix.
