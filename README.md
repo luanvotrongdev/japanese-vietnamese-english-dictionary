@@ -1,15 +1,17 @@
-# javi: Japanese → Vietnamese dictionary for Kobo and Yomitan
+# javi: Từ điển Nhật → Việt cho Kobo và Yomitan
 
-Builds a Japanese → Vietnamese (and English) dictionary from JMdict headwords, with meanings from **Mazii** (Vietnamese) and **Jisho** (English), and exports it as:
+**Tiếng Việt** | [English](README.en.md)
 
-- a **Kobo** dictionary (`dicthtml-ja.zip`), for looking words up in Japanese books on a Kobo e-reader
-- a **Yomitan** dictionary (`lulujv.zip`), for the browser pop-up dictionary
+Công cụ này tạo từ điển Nhật → Việt (kèm tiếng Anh) từ danh sách từ của JMdict, lấy nghĩa tiếng Việt từ **Mazii** và nghĩa tiếng Anh từ **Jisho**, rồi xuất ra:
 
-Everything runs in one Zig program, `javi-transform`, with no other tools to install.
+- từ điển **Kobo** (`dicthtml-ja.zip`), để tra từ khi đọc sách tiếng Nhật trên máy đọc sách Kobo
+- từ điển **Yomitan** (`lulujv.zip`), để tra từ bằng cửa sổ bật lên trên trình duyệt
 
-> A personal side project, built to read Japanese books with Vietnamese definitions. Use it at your own risk.
+Mọi bước đều chạy trong một chương trình Zig duy nhất, `javi-transform`, không cần cài thêm công cụ nào khác.
 
-## What an entry looks like
+> Đây là dự án cá nhân làm cho vui, để đọc sách tiếng Nhật với nghĩa tiếng Việt. Bạn tự chịu rủi ro khi sử dụng.
+
+## Một mục từ trông như thế nào
 
 ```
 食べる 【たべる】 [2]  N5 · thông dụng
@@ -24,41 +26,41 @@ English
  2. to live on (e.g. a salary); to live off; to subsist on
 ```
 
-Looking up a single kanji also shows its kanji card: Hán Việt reading, Vietnamese explanation, on/kun readings, radical, components, a memory tip and example words.
+Khi tra một chữ Hán đơn lẻ, bạn còn thấy thẻ chữ Hán: âm Hán Việt, giải nghĩa tiếng Việt, âm On/Kun, bộ thủ, thành phần, mẹo nhớ và từ ví dụ.
 
-You can look a word up by any of its kanji spellings, its hiragana reading or its katakana form.
+Bạn có thể tra một từ bằng bất kỳ cách viết chữ Hán nào của nó, bằng cách đọc hiragana hoặc dạng katakana.
 
-## The data is not included
+## Không kèm dữ liệu từ điển
 
-This repository contains no dictionary data. The Vietnamese and English meanings come from Mazii and Jisho, and their content belongs to them, so it can't be redistributed. You build your own copy with the steps below: import JMdict, crawl Mazii and Jisho, build the database, export.
+Kho mã này không chứa dữ liệu từ điển. Nghĩa tiếng Việt và tiếng Anh lấy từ Mazii và Jisho; nội dung đó thuộc về họ nên không thể phát hành lại. Bạn tự tạo bản của mình theo các bước bên dưới: nhập JMdict, thu thập dữ liệu từ Mazii và Jisho, tạo cơ sở dữ liệu, rồi xuất từ điển.
 
-## Requirements
+## Yêu cầu
 
-- [Zig](https://ziglang.org/download/) **0.16.0** exactly (the standard library changes between releases)
-- An internet connection for the first steps: downloading JMdict and crawling Mazii and Jisho
-- For Kobo: firmware **4.24.15672 or newer**, which supports custom dictionaries without patches
+- [Zig](https://ziglang.org/download/) đúng phiên bản **0.16.0** (thư viện chuẩn của Zig thay đổi giữa các phiên bản)
+- Kết nối Internet cho các bước đầu: tải JMdict và thu thập dữ liệu từ Mazii và Jisho
+- Với Kobo: firmware **4.24.15672 trở lên**, hỗ trợ từ điển tùy chỉnh mà không cần vá
 
-## Usage
+## Cách dùng
 
-### 1. Build the program
+### 1. Biên dịch chương trình
 
 ```bash
 zig build -Doptimize=ReleaseFast
 ```
 
-The program is `zig-out/bin/javi-transform` (`javi-transform.exe` on Windows).
+Chương trình nằm ở `zig-out/bin/javi-transform` (trên Windows là `javi-transform.exe`).
 
-### 2. Import JMdict
+### 2. Nhập JMdict
 
 ```bash
 zig-out/bin/javi-transform jmdict jmdict-cache.sqlite
 ```
 
-This downloads JMdict (`JMdict_e_examp.gz`, about 13 MB, from the EDRDG server) and stores every entry's headwords and readings in `jmdict-cache.sqlite`, the cache the next steps use. If the file doesn't exist yet, it is created.
+Lệnh này tải JMdict (`JMdict_e_examp.gz`, khoảng 13 MB, từ máy chủ của EDRDG) và lưu cách viết và cách đọc của mọi mục từ vào `jmdict-cache.sqlite`, tệp bộ nhớ đệm mà các bước sau dùng. Nếu tệp chưa có, lệnh sẽ tạo mới.
 
-Run it again any time to pick up a newer JMdict. Existing entries keep their crawled data, and only new or changed words need crawling. Words that JMdict has removed are reported; add `--prune` to delete them along with their crawled data. To use a JMdict file you already have, pass `--file JMdict_e_examp.gz` (a `.gz` or `.xml` file).
+Bạn có thể chạy lại bất cứ lúc nào để cập nhật JMdict mới hơn. Các mục từ đã có vẫn giữ dữ liệu đã thu thập, chỉ những từ mới hoặc đã thay đổi mới cần thu thập lại. Những từ JMdict đã xóa sẽ được báo lại; thêm `--prune` để xóa chúng cùng dữ liệu đã thu thập. Nếu bạn đã có sẵn tệp JMdict, dùng `--file JMdict_e_examp.gz` (tệp `.gz` hoặc `.xml`).
 
-### 3. Crawl Mazii and Jisho
+### 3. Thu thập dữ liệu từ Mazii và Jisho
 
 ```bash
 zig-out/bin/javi-transform crawl jmdict-cache.sqlite --dry-run
@@ -68,68 +70,68 @@ zig-out/bin/javi-transform crawl jmdict-cache.sqlite --dry-run
 zig-out/bin/javi-transform crawl jmdict-cache.sqlite
 ```
 
-This fetches the Vietnamese and English meanings for every word and kanji. `--dry-run` only counts the entries and kanji that have no Mazii/Jisho data yet. Without it, the program fetches them and saves each one to the cache as it goes. Stop it any time with Ctrl+C; rerunning continues where it left off. It waits 0.5–1.5 seconds between requests. Please don't make it faster: be gentle with Mazii and Jisho. A full crawl takes many hours. Options: `--limit N`, `--min-sleep MS`, `--max-sleep MS`.
+Bước này lấy nghĩa tiếng Việt và tiếng Anh cho mọi từ và chữ Hán. `--dry-run` chỉ đếm số mục từ và chữ Hán chưa có dữ liệu Mazii/Jisho. Khi bỏ tùy chọn đó, chương trình sẽ tải dữ liệu và lưu từng mục vào bộ nhớ đệm ngay khi tải xong. Bạn có thể dừng bất cứ lúc nào bằng Ctrl+C; chạy lại sẽ tiếp tục từ chỗ đã dừng. Chương trình chờ 0,5–1,5 giây giữa các yêu cầu. Xin đừng giảm thời gian chờ: hãy nhẹ tay với Mazii và Jisho. Thu thập toàn bộ mất nhiều giờ. Tùy chọn: `--limit N`, `--min-sleep MS`, `--max-sleep MS`.
 
-### 4. Build the dictionary database
+### 4. Tạo cơ sở dữ liệu từ điển
 
 ```bash
 zig-out/bin/javi-transform build jmdict-cache.sqlite javi.sqlite
 ```
 
-This turns the raw crawl data into a clean database, `javi.sqlite` (about a minute). Both exports read from it.
+Bước này chuyển dữ liệu thô đã thu thập thành một cơ sở dữ liệu gọn gàng, `javi.sqlite` (khoảng một phút). Cả hai lệnh xuất đều đọc từ tệp này.
 
-### 5a. Export the Kobo dictionary
+### 5a. Xuất từ điển Kobo
 
 ```bash
 zig-out/bin/javi-transform kobo javi.sqlite dicthtml-ja.zip
 ```
 
-To install it:
+Cách cài đặt:
 
-1. Connect the Kobo to your computer.
-2. Copy `dicthtml-ja.zip` into `KOBOeReader/.kobo/custom-dict/`. Create the folder if it doesn't exist; `.kobo` is a hidden folder.
-3. Eject the Kobo.
-4. In a book, long-press a word, then pick **日本語 (Custom)** in the dictionary pop-up.
+1. Kết nối Kobo với máy tính.
+2. Chép `dicthtml-ja.zip` vào `KOBOeReader/.kobo/custom-dict/`. Tạo thư mục nếu chưa có; `.kobo` là thư mục ẩn.
+3. Ngắt kết nối (eject) Kobo.
+4. Trong sách, nhấn giữ một từ, rồi chọn **日本語 (Custom)** trong cửa sổ từ điển.
 
-**If Vietnamese letters are missing** (for example "CHIẾN" shows as "CHIN"), your Kobo is drawing the dictionary in its built-in Georgia font, which lacks letters like ư ơ ạ ế ự. The entries ask for a font that has them (Kobo Nickel), but some Kobos ignore that. Install the Vietnamese font fix from **[lelinhtinh/kobo-tieng-viet](https://github.com/lelinhtinh/kobo-tieng-viet)**. It replaces Kobo's Georgia and Avenir Next with Vietnamese-capable versions, which fixes the dictionary and Vietnamese text everywhere else on the device. In short: download `KoboRoot.tgz` from the project's latest release, copy it into `KOBOeReader/.kobo/`, and eject; the Kobo installs it and restarts. Follow that project's README for the current steps. It changes system files, and a firmware update can undo it.
+**Nếu bị mất chữ tiếng Việt** (ví dụ "CHIẾN" hiện thành "CHIN"), nghĩa là Kobo đang hiển thị từ điển bằng phông Georgia có sẵn, vốn thiếu các chữ như ư ơ ạ ế ự. Các mục từ có yêu cầu một phông có đủ chữ (Kobo Nickel), nhưng một số máy Kobo bỏ qua yêu cầu này. Hãy cài bản sửa phông tiếng Việt của **[lelinhtinh/kobo-tieng-viet](https://github.com/lelinhtinh/kobo-tieng-viet)**. Bản sửa thay phông Georgia và Avenir Next của Kobo bằng phiên bản hỗ trợ tiếng Việt, giúp hiển thị đúng cả từ điển lẫn chữ tiếng Việt ở mọi nơi khác trên máy. Tóm tắt: tải `KoboRoot.tgz` từ bản phát hành mới nhất của dự án, chép vào `KOBOeReader/.kobo/`, rồi ngắt kết nối; Kobo sẽ tự cài và khởi động lại. Hãy làm theo README của dự án đó để có hướng dẫn mới nhất. Bản sửa thay đổi tệp hệ thống, và cập nhật firmware có thể xóa mất nó.
 
-### 5b. Export the Yomitan dictionary
+### 5b. Xuất từ điển Yomitan
 
 ```bash
 zig-out/bin/javi-transform yomitan javi.sqlite lulujv.zip
 ```
 
-In Yomitan, open **Settings → Dictionaries → Import** and select `lulujv.zip`. You get:
+Trong Yomitan, mở **Settings → Dictionaries → Import** và chọn `lulujv.zip`. Bạn sẽ có:
 
-- word-type labels, numbered Vietnamese meanings with example sentences, and a separate English section
-- pitch-accent graphs
-- **★** (common word) and **JLPT** level tags
-- all spellings of a word grouped into one result
-- inflected forms found too (食べた → 食べる)
-- kanji cards with Hán Việt, explanations and a stats table
+- nhãn từ loại, các nghĩa tiếng Việt được đánh số kèm câu ví dụ, và một phần tiếng Anh riêng
+- biểu đồ trọng âm (pitch accent)
+- nhãn **★** (từ thông dụng) và cấp độ **JLPT**
+- mọi cách viết của một từ được gộp vào một kết quả
+- tra được cả dạng đã chia (食べた → 食べる)
+- thẻ chữ Hán với âm Hán Việt, giải nghĩa và bảng thông tin
 
-Each part of an entry has a `data-sc-content` attribute (`vietnamese`, `english`, `example`, `word-types`, `section-label`), so you can restyle it with Yomitan's custom CSS.
+Mỗi phần của mục từ có thuộc tính `data-sc-content` (`vietnamese`, `english`, `example`, `word-types`, `section-label`), nên bạn có thể đổi giao diện bằng CSS tùy chỉnh của Yomitan.
 
-## All commands
+## Tất cả các lệnh
 
-| Command | What it does |
+| Lệnh | Chức năng |
 | --- | --- |
-| `jmdict <cache.sqlite> [--file PATH] [--url URL] [--prune]` | Download JMdict and import its headwords and readings into the cache (creates it if missing) |
-| `crawl <cache.sqlite> [--dry-run] [--limit N] [--min-sleep MS] [--max-sleep MS]` | Fetch Mazii/Jisho data for entries and kanji that have none |
-| `check <cache.sqlite>` | Check that every crawled response can be read, and report the ones that can't |
-| `build <cache.sqlite> <javi.sqlite>` | Build the clean dictionary database |
-| `kobo <javi.sqlite> <dicthtml-ja.zip>` | Export the Kobo dictionary |
-| `yomitan <javi.sqlite> <lulujv.zip>` | Export the Yomitan dictionary |
+| `jmdict <cache.sqlite> [--file PATH] [--url URL] [--prune]` | Tải JMdict và nhập cách viết, cách đọc vào bộ nhớ đệm (tạo mới nếu chưa có) |
+| `crawl <cache.sqlite> [--dry-run] [--limit N] [--min-sleep MS] [--max-sleep MS]` | Lấy dữ liệu Mazii/Jisho cho các mục từ và chữ Hán chưa có |
+| `check <cache.sqlite>` | Kiểm tra mọi phản hồi đã thu thập có đọc được không, và báo những mục bị lỗi |
+| `build <cache.sqlite> <javi.sqlite>` | Tạo cơ sở dữ liệu từ điển gọn gàng |
+| `kobo <javi.sqlite> <dicthtml-ja.zip>` | Xuất từ điển Kobo |
+| `yomitan <javi.sqlite> <lulujv.zip>` | Xuất từ điển Yomitan |
 
-Run the tests with `zig build test`. `docs/schema.md` describes the database, and `docs/known-issues.md` lists known data problems.
+Chạy kiểm thử bằng `zig build test`. `docs/schema.md` mô tả cơ sở dữ liệu, còn `docs/known-issues.md` liệt kê các lỗi dữ liệu đã biết (cả hai bằng tiếng Anh).
 
-## Credits
+## Ghi công
 
-- **[Mazii](https://mazii.net)**, the Japanese–Vietnamese dictionary: all Vietnamese meanings, example sentences, pitch accents and the kanji details (Hán Việt readings, explanations, components, memory tips).
-- **[Jisho](https://jisho.org)**, the Japanese–English dictionary: English meanings, parts of speech, JLPT levels, common-word flags, and kanji readings, radicals and stroke counts.
-- **[lelinhtinh/kobo-tieng-viet](https://github.com/lelinhtinh/kobo-tieng-viet)** by lelinhtinh: the Vietnamese font fix that makes Vietnamese text display on Kobo.
-- [JMdict](https://www.edrdg.org/jmdict/edict.html) by the Electronic Dictionary Research and Development Group: the word list (headwords, spellings and readings), under the [EDRDG licence](https://www.edrdg.org/edrdg/licence.html).
-- [cessen/kobo_jp_dict](https://github.com/cessen/kobo_jp_dict), for showing how Kobo looks up Japanese words; [pgaskin/dictutil](https://github.com/pgaskin/dictutil), for documenting the Kobo dictionary format; and [marisa-trie](https://github.com/s-yata/marisa-trie) by Susumu Yata, whose trie format Kobo uses for its word index (ported to Zig here).
-- Written by Vo Trong Luan, with help from [Claude Code](https://claude.com/claude-code).
+- **[Mazii](https://mazii.net)**, từ điển Nhật–Việt: toàn bộ nghĩa tiếng Việt, câu ví dụ, trọng âm và thông tin chữ Hán (âm Hán Việt, giải nghĩa, thành phần, mẹo nhớ).
+- **[Jisho](https://jisho.org)**, từ điển Nhật–Anh: nghĩa tiếng Anh, từ loại, cấp độ JLPT, nhãn từ thông dụng, cùng cách đọc, bộ thủ và số nét của chữ Hán.
+- **[lelinhtinh/kobo-tieng-viet](https://github.com/lelinhtinh/kobo-tieng-viet)** của lelinhtinh: bản sửa phông chữ giúp hiển thị tiếng Việt trên Kobo.
+- [JMdict](https://www.edrdg.org/jmdict/edict.html) của Electronic Dictionary Research and Development Group: danh sách từ (mục từ, cách viết và cách đọc), theo [giấy phép EDRDG](https://www.edrdg.org/edrdg/licence.html).
+- [cessen/kobo_jp_dict](https://github.com/cessen/kobo_jp_dict), đã chỉ ra cách Kobo tra từ tiếng Nhật; [pgaskin/dictutil](https://github.com/pgaskin/dictutil), đã ghi lại định dạng từ điển của Kobo; và [marisa-trie](https://github.com/s-yata/marisa-trie) của Susumu Yata, định dạng trie mà Kobo dùng cho chỉ mục từ (được chuyển sang Zig trong dự án này).
+- Viết bởi Vo Trong Luan, với sự hỗ trợ của [Claude Code](https://claude.com/claude-code).
 
-Neither Mazii nor Jisho is affiliated with this project. Their content belongs to them, and JMdict data is under the EDRDG licence.
+Mazii và Jisho không liên quan đến dự án này. Nội dung của họ thuộc về họ, và dữ liệu JMdict theo giấy phép EDRDG.
